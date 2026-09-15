@@ -1,6 +1,6 @@
 [package]
 name = "armature-admin"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.94.1"
 authors = ["Joseph Quinn <quinn.josephr@proton.me>"]
@@ -12,7 +12,7 @@ keywords = ["admin", "dashboard", "crud", "ui", "generator"]
 categories = ["web-programming", "gui"]
 
 [dependencies]
-armature-core = { version = "0.9" }
+armature-core = { version = "0.10" }
 armature-log = { version = "0.2" }
 armature-proc-macro = { version = "0.4" }
 tokio = { version = "1.53", features = ["rt-multi-thread", "sync"] }
