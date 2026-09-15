@@ -9,10 +9,12 @@ Earlier changes are recorded in the workspace [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
-### Changed — `0.3.0` → `0.3.1`
+## [0.5.0] - 2026-09-15
 
-- Migrated onto `armature-core` `0.8`'s `Bytes`-backed request and response types. No behavior change beyond what that migration implies; see [`armature-core/CHANGELOG.md`](../armature-core/CHANGELOG.md).
-- List parameters and the CSV export flag are read through `query_param`/`query()` rather than the removed `query_params` map.
+### Changed
+
+- **Breaking:** requires `armature-core` 0.10 (was `0.9`); its types appear in this crate's API, so the requirement change is breaking here and the minor moves. Part of the `armature-core` 0.10 release train.
+- Dependencies bumped to their latest releases: `tokio` 1.52 → 1.53, `uuid` 1.23 → 1.26, `validator` 0.20 → 0.21.
 
 ## [0.4.0] - 2026-08-05
 
