@@ -246,15 +246,18 @@ impl DataSource for InMemoryDataSource {
             })?;
 
         // Merge provided fields onto the existing record, preserving the PK.
-        if let (Some(existing), Some(incoming)) = (slot.as_object_mut(), data.as_object()) {
-            for (k, v) in incoming {
-                if k == &model.primary_key {
-                    continue;
-                }
-                existing.insert(k.clone(), v.clone());
+        // A non-object body would otherwise replace the whole row, PK included.
+        let incoming = data
+            .as_object()
+            .ok_or_else(|| AdminError::Validation("record must be a JSON object".to_string()))?;
+        let existing = slot
+            .as_object_mut()
+            .ok_or_else(|| AdminError::Validation("stored record is not an object".to_string()))?;
+        for (k, v) in incoming {
+            if k == &model.primary_key {
+                continue;
             }
-        } else {
-            *slot = data;
+            existing.insert(k.clone(), v.clone());
         }
         Ok(())
     }
@@ -348,6 +351,25 @@ mod tests {
 
         ds.delete(&model, "7").await.unwrap();
         assert!(ds.get(&model, "7").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn stub_update_rejects_non_object() {
+        let ds = InMemoryDataSource::new();
+        let model = user_model();
+        ds.seed("user", serde_json::json!({ "id": "1", "name": "Alice" }));
+
+        assert!(
+            ds.update(&model, "1", serde_json::json!(["x"]))
+                .await
+                .is_err()
+        );
+        assert!(
+            ds.update(&model, "1", serde_json::json!("x"))
+                .await
+                .is_err()
+        );
+        assert_eq!(ds.get(&model, "1").await.unwrap()["name"], "Alice");
     }
 
     #[tokio::test]

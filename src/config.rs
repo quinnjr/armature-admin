@@ -15,12 +15,14 @@ pub struct AdminConfig {
     pub items_per_page: usize,
     /// Maximum items per page allowed
     pub max_items_per_page: usize,
-    /// Require authentication
-    pub require_auth: bool,
     /// Enable search globally
     pub enable_search: bool,
-    /// Enable export functionality
+    /// Enable CSV export (off by default: an export is a bulk copy of the
+    /// table, so it is opt-in)
     pub enable_export: bool,
+    /// Maximum number of rows a single CSV export may contain
+    #[serde(default = "default_export_max_rows")]
+    pub export_max_rows: usize,
     /// Date format
     pub date_format: String,
     /// DateTime format
@@ -35,6 +37,13 @@ pub struct AdminConfig {
     pub custom_js: Option<String>,
     /// Footer text
     pub footer_text: Option<String>,
+}
+
+/// Default [`AdminConfig::export_max_rows`].
+pub const DEFAULT_EXPORT_MAX_ROWS: usize = 10_000;
+
+fn default_export_max_rows() -> usize {
+    DEFAULT_EXPORT_MAX_ROWS
 }
 
 impl AdminConfig {
@@ -71,9 +80,9 @@ impl Default for AdminConfig {
             theme: Theme::default(),
             items_per_page: 25,
             max_items_per_page: 100,
-            require_auth: true,
             enable_search: true,
-            enable_export: true,
+            enable_export: false,
+            export_max_rows: DEFAULT_EXPORT_MAX_ROWS,
             date_format: "%Y-%m-%d".to_string(),
             datetime_format: "%Y-%m-%d %H:%M:%S".to_string(),
             logo_url: None,
@@ -251,6 +260,8 @@ mod tests {
         assert_eq!(config.title, "Admin Dashboard");
         assert_eq!(config.base_path, "/admin");
         assert_eq!(config.items_per_page, 25);
+        assert!(!config.enable_export, "export must be opt-in");
+        assert_eq!(config.export_max_rows, DEFAULT_EXPORT_MAX_ROWS);
     }
 
     #[test]
