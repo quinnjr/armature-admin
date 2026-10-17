@@ -1,6 +1,6 @@
 [package]
 name = "armature-admin"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.94.1"
 authors = ["Joseph Quinn <quinn.josephr@proton.me>"]
@@ -12,11 +12,11 @@ keywords = ["admin", "dashboard", "crud", "ui", "generator"]
 categories = ["web-programming", "gui"]
 
 [dependencies]
-armature-core = { version = "0.10" }
-armature-log = { version = "0.2" }
-armature-proc-macro = { version = "0.4" }
+armature-core = { version = "0.11" }
+armature-log = { version = "0.3" }
+armature-proc-macro = { version = "0.5" }
 # CSRF tokens for the admin forms (signed double-submit, bound to the admin).
-armature-security = { version = "0.4" }
+armature-security = { version = "0.5" }
 tokio = { version = "1.53", features = ["rt-multi-thread", "sync"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
