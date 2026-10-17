@@ -252,6 +252,9 @@ pub struct DetailView {
     pub list_url: String,
     /// Inlines (related data)
     pub inlines: Vec<InlineView>,
+    /// CSRF token rendered into the delete form (`_csrf` field)
+    #[serde(skip)]
+    pub csrf_token: Option<String>,
 }
 
 impl DetailView {
@@ -275,23 +278,42 @@ impl DetailView {
             delete_url: format!("/admin/{}/{}/delete", model.name, id),
             list_url: format!("/admin/{}", model.name),
             inlines: Vec::new(),
+            csrf_token: None,
         }
     }
 
-    /// Set field values
-    pub fn with_data(mut self, data: serde_json::Value) -> Self {
+    /// Set field values from a record.
+    ///
+    /// Only the model's declared, visible fields are rendered (see
+    /// [`ModelDefinition::visible_fields`]): columns the data source returns
+    /// but the model does not declare, excluded fields, and sensitive fields
+    /// (`password*`, `*_hash`, `*token*`, `*secret*`) never reach the page.
+    pub fn with_data(mut self, model: &ModelDefinition, data: serde_json::Value) -> Self {
         if let Some(obj) = data.as_object() {
-            self.fields = obj
-                .iter()
-                .map(|(k, v)| FieldValue {
-                    name: k.clone(),
-                    label: k.replace('_', " "),
-                    value: v.clone(),
-                    rendered: render_value(v),
-                    readonly: false,
+            self.fields = model
+                .visible_fields()
+                .into_iter()
+                .map(|field| {
+                    let value = obj
+                        .get(&field.name)
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
+                    FieldValue {
+                        name: field.name.clone(),
+                        label: field.label.clone(),
+                        rendered: render_value(&value),
+                        value,
+                        readonly: model.is_readonly(&field.name),
+                    }
                 })
                 .collect();
         }
+        self
+    }
+
+    /// Set the CSRF token for the page's POST forms.
+    pub fn with_csrf_token(mut self, token: impl Into<String>) -> Self {
+        self.csrf_token = Some(token.into());
         self
     }
 }
@@ -317,13 +339,16 @@ pub struct CreateView {
     pub cancel_url: String,
     /// Inlines
     pub inlines: Vec<InlineView>,
+    /// CSRF token rendered into the form (`_csrf` field)
+    #[serde(skip)]
+    pub csrf_token: Option<String>,
 }
 
 impl CreateView {
     /// Create a new create view
     pub fn new(model: &ModelDefinition) -> Self {
         let fields = model
-            .form_fields()
+            .editable_fields()
             .iter()
             .map(|f| FormField::from_definition(f))
             .collect();
@@ -342,7 +367,14 @@ impl CreateView {
             submit_url: format!("/admin/{}/add", model.name),
             cancel_url: format!("/admin/{}", model.name),
             inlines: Vec::new(),
+            csrf_token: None,
         }
+    }
+
+    /// Set the CSRF token for the form.
+    pub fn with_csrf_token(mut self, token: impl Into<String>) -> Self {
+        self.csrf_token = Some(token.into());
+        self
     }
 }
 
@@ -373,13 +405,16 @@ pub struct EditView {
     pub can_delete: bool,
     /// Inlines
     pub inlines: Vec<InlineView>,
+    /// CSRF token rendered into the forms (`_csrf` field)
+    #[serde(skip)]
+    pub csrf_token: Option<String>,
 }
 
 impl EditView {
     /// Create a new edit view (form fields default to empty values).
     pub fn new(model: &ModelDefinition, id: String) -> Self {
         let fields = model
-            .form_fields()
+            .editable_fields()
             .iter()
             .map(|f| FormField::from_definition(f))
             .collect();
@@ -402,7 +437,14 @@ impl EditView {
             delete_url: format!("/admin/{}/{}/delete", model.name, id),
             can_delete: model.can_delete,
             inlines: Vec::new(),
+            csrf_token: None,
         }
+    }
+
+    /// Set the CSRF token for the page's POST forms.
+    pub fn with_csrf_token(mut self, token: impl Into<String>) -> Self {
+        self.csrf_token = Some(token.into());
+        self
     }
 
     /// Populate the form fields with the current record's values.
@@ -632,6 +674,48 @@ mod tests {
         assert_eq!(view.id, "5");
         let name = view.fields.iter().find(|f| f.name == "name").unwrap();
         assert_eq!(name.value, serde_json::json!("Carol"));
+    }
+
+    #[test]
+    fn detail_view_renders_only_declared_non_sensitive_fields() {
+        let model = ModelDefinition::builder("user")
+            .id_field()
+            .field(FieldDefinition::new("name", FieldType::String))
+            .field(FieldDefinition::new("password_hash", FieldType::String))
+            .field(FieldDefinition::new("api_token", FieldType::String))
+            .build();
+
+        let view = DetailView::new(&model, "1".to_string()).with_data(
+            &model,
+            serde_json::json!({
+                "id": 1,
+                "name": "Alice",
+                "password_hash": "$argon2id$secret",
+                "api_token": "tok_live",
+                "undeclared_column": "internal",
+            }),
+        );
+
+        let names: Vec<&str> = view.fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["id", "name"]);
+    }
+
+    #[test]
+    fn forms_offer_only_editable_fields() {
+        let model = ModelDefinition::builder("user")
+            .id_field()
+            .field(FieldDefinition::new("name", FieldType::String))
+            .field(FieldDefinition::new("role", FieldType::String))
+            .field(FieldDefinition::new("password", FieldType::String))
+            .readonly_fields(["role"])
+            .build();
+
+        let view = EditView::new(&model, "1".to_string());
+        let names: Vec<&str> = view.fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["name"]);
+        let view = CreateView::new(&model);
+        let names: Vec<&str> = view.fields.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["name"]);
     }
 
     #[test]
