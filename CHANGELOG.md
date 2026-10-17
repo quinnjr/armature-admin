@@ -9,6 +9,8 @@ Earlier changes are recorded in the workspace [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-17
+
 ### Security
 
 - The admin panel can no longer be mounted unauthenticated. The former `require_auth` check accepted any non-empty `Authorization` header (`Authorization: x` granted full CRUD). Every request now goes through a required `AdminAuthenticator` that must verify a real identity and admin rights (`401` / `403` otherwise).
