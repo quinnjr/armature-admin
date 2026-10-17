@@ -26,6 +26,7 @@ impl ModelRegistry {
 
     /// Register a model
     pub fn register(&mut self, model: ModelDefinition) {
+        let model = model.sanitized();
         let name = model.name.clone();
         self.order.push(name.clone());
         self.models.insert(name, model);
@@ -34,6 +35,7 @@ impl ModelRegistry {
     /// Register a model in a group
     pub fn register_in_group(&mut self, group: impl Into<String>, model: ModelDefinition) {
         let group = group.into();
+        let model = model.sanitized();
         let name = model.name.clone();
 
         self.models.insert(name.clone(), model);

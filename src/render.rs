@@ -18,6 +18,18 @@ pub(crate) fn escape(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+/// Hidden `_csrf` input for a POST form (empty when no token is set, in
+/// which case the server rejects the submission).
+fn csrf_input(token: &Option<String>) -> String {
+    match token {
+        Some(t) => format!(
+            "<input type=\"hidden\" name=\"_csrf\" value=\"{}\">",
+            escape(t)
+        ),
+        None => String::new(),
+    }
+}
+
 /// Wrap body content in a full HTML document with the themed admin stylesheet.
 fn page(config: &AdminConfig, title: &str, body: &str) -> String {
     // Favicon link when configured.
@@ -213,7 +225,7 @@ pub fn render_list(view: &ListView, config: &AdminConfig) -> String {
     };
 
     // An export link pointing at the list route with `?export=csv`.
-    let export = if config.enable_export {
+    let export = if config.enable_export && view.can_export {
         format!(
             "<a class=\"admin-btn admin-export\" href=\"{}?export=csv\">Export</a>",
             escape(&list_url)
@@ -271,9 +283,10 @@ pub fn render_detail(view: &DetailView, config: &AdminConfig) -> String {
     }
     if view.can_delete {
         actions.push_str(&format!(
-            "<form method=\"post\" action=\"{}\" class=\"admin-inline-form\">\
+            "<form method=\"post\" action=\"{}\" class=\"admin-inline-form\">{}\
              <button class=\"admin-btn admin-btn-danger\" type=\"submit\">Delete</button></form>",
-            escape(&view.delete_url)
+            escape(&view.delete_url),
+            csrf_input(&view.csrf_token)
         ));
     }
 
@@ -323,13 +336,14 @@ pub fn render_create(view: &CreateView, config: &AdminConfig) -> String {
     let body = format!(
         "{crumbs}\n<h1>{title}</h1>\n\
          <form method=\"post\" action=\"{action}\" class=\"admin-card admin-form\">\
-         {fields}<div class=\"admin-actions\">\
+         {csrf}{fields}<div class=\"admin-actions\">\
          <a class=\"admin-btn\" href=\"{cancel}\">Cancel</a>\
          <button class=\"admin-btn admin-btn-primary\" type=\"submit\">Save</button></div></form>",
         crumbs = breadcrumbs_html(&view.breadcrumbs),
         title = escape(&view.title),
         action = escape(&view.submit_url),
         fields = fields.join(""),
+        csrf = csrf_input(&view.csrf_token),
         cancel = escape(&view.cancel_url),
     );
     page(config, &view.title, &body)
@@ -340,9 +354,10 @@ pub fn render_edit(view: &EditView, config: &AdminConfig) -> String {
     let fields: Vec<String> = view.fields.iter().map(form_input).collect();
     let delete = if view.can_delete {
         format!(
-            "<form method=\"post\" action=\"{}\" class=\"admin-inline-form\">\
+            "<form method=\"post\" action=\"{}\" class=\"admin-inline-form\">{}\
              <button class=\"admin-btn admin-btn-danger\" type=\"submit\">Delete</button></form>",
-            escape(&view.delete_url)
+            escape(&view.delete_url),
+            csrf_input(&view.csrf_token)
         )
     } else {
         String::new()
@@ -350,20 +365,21 @@ pub fn render_edit(view: &EditView, config: &AdminConfig) -> String {
     let body = format!(
         "{crumbs}\n<h1>{title}</h1>\n\
          <form method=\"post\" action=\"{action}\" class=\"admin-card admin-form\">\
-         {fields}<div class=\"admin-actions\">\
+         {csrf}{fields}<div class=\"admin-actions\">\
          <a class=\"admin-btn\" href=\"{cancel}\">Cancel</a>\
          <button class=\"admin-btn admin-btn-primary\" type=\"submit\">Save</button></div></form>\n{delete}",
         crumbs = breadcrumbs_html(&view.breadcrumbs),
         title = escape(&view.title),
         action = escape(&view.submit_url),
         fields = fields.join(""),
+        csrf = csrf_input(&view.csrf_token),
         cancel = escape(&view.cancel_url),
         delete = delete,
     );
     page(config, &view.title, &body)
 }
 
-/// A minimal unauthorized page (used when `require_auth` blocks a request).
+/// A minimal unauthorized page (used when the authenticator rejects a request).
 pub fn render_unauthorized(config: &AdminConfig) -> String {
     page(
         config,
@@ -378,6 +394,15 @@ pub fn render_error(config: &AdminConfig, message: &str) -> String {
         config,
         "Error",
         &format!("<h1>Request failed</h1><p>{}</p>", escape(message)),
+    )
+}
+
+/// A minimal forbidden page (authenticated but not authorized, or a failed CSRF check).
+pub fn render_forbidden(config: &AdminConfig) -> String {
+    page(
+        config,
+        "Forbidden",
+        "<h1>403 Forbidden</h1><p>You are not allowed to perform this action.</p>",
     )
 }
 

@@ -89,18 +89,100 @@ impl ModelDefinition {
             .collect()
     }
 
-    /// Get editable fields for forms
+    /// Get the non-primary-key form fields (excluded and sensitive fields
+    /// are left out; readonly fields are included).
     pub fn form_fields(&self) -> Vec<&FieldDefinition> {
         self.fields
             .iter()
-            .filter(|f| !f.primary_key && !self.exclude.contains(&f.name))
+            .filter(|f| {
+                !f.primary_key && !self.exclude.contains(&f.name) && !is_sensitive_field(&f.name)
+            })
             .collect()
+    }
+
+    /// Whether `name` is readonly, either on the field itself or via
+    /// [`readonly_fields`](Self::readonly_fields).
+    pub fn is_readonly(&self, name: &str) -> bool {
+        self.readonly_fields.iter().any(|r| r == name)
+            || self
+                .get_field(name)
+                .is_some_and(|f| f.readonly || f.primary_key)
+    }
+
+    /// Fields a client may write on create/edit: declared, not the primary
+    /// key, not readonly, not excluded and not sensitive. This is the
+    /// server-side allowlist every submitted body is filtered through.
+    pub fn editable_fields(&self) -> Vec<&FieldDefinition> {
+        self.fields
+            .iter()
+            .filter(|f| {
+                f.name != self.primary_key
+                    && !f.primary_key
+                    && !self.is_readonly(&f.name)
+                    && !self.exclude.contains(&f.name)
+                    && !is_sensitive_field(&f.name)
+            })
+            .collect()
+    }
+
+    /// Fields shown on detail pages: declared, not excluded, not sensitive.
+    pub fn visible_fields(&self) -> Vec<&FieldDefinition> {
+        self.fields
+            .iter()
+            .filter(|f| !self.exclude.contains(&f.name) && !is_sensitive_field(&f.name))
+            .collect()
+    }
+
+    /// Whether `name` may be used as a `sort` key: a declared, sortable,
+    /// visible field.
+    pub fn is_sortable_field(&self, name: &str) -> bool {
+        self.visible_fields()
+            .iter()
+            .any(|f| f.name == name && f.sortable)
+    }
+
+    /// Whether `name` may be used as a `filter.*` key: a declared
+    /// [`list_filter`](Self::list_filter) field that is visible.
+    pub fn is_filter_field(&self, name: &str) -> bool {
+        self.list_filter.iter().any(|f| f == name)
+            && self.visible_fields().iter().any(|f| f.name == name)
+    }
+
+    /// Strip sensitive and excluded field names from every list the admin
+    /// exposes (list columns, search, filters, ordering), so a sensitive
+    /// column is never rendered, exported, searched, filtered or sorted on.
+    pub fn sanitized(mut self) -> Self {
+        let hidden =
+            |name: &String, exclude: &[String]| is_sensitive_field(name) || exclude.contains(name);
+        let exclude = self.exclude.clone();
+        self.list_display.retain(|n| !hidden(n, &exclude));
+        self.search_fields.retain(|n| !hidden(n, &exclude));
+        self.list_filter.retain(|n| !hidden(n, &exclude));
+        self.ordering.retain(|o| !hidden(&o.field, &exclude));
+        self
     }
 
     /// Get primary key field
     pub fn pk_field(&self) -> Option<&FieldDefinition> {
         self.get_field(&self.primary_key)
     }
+}
+
+/// Whether a field name denotes a secret that the admin must never render,
+/// export, accept, or query on: `password*`, `*_hash`, `*token*`, `*secret*`
+/// (case-insensitive).
+///
+/// ```
+/// use armature_admin::is_sensitive_field;
+///
+/// assert!(is_sensitive_field("password_hash"));
+/// assert!(is_sensitive_field("api_token"));
+/// assert!(is_sensitive_field("ClientSecret"));
+/// assert!(!is_sensitive_field("email"));
+/// ```
+pub fn is_sensitive_field(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    n.starts_with("password") || n.ends_with("_hash") || n.contains("token") || n.contains("secret")
 }
 
 /// Builder for model definitions
@@ -329,6 +411,7 @@ impl ModelDefinitionBuilder {
             can_delete: self.can_delete,
             can_export: self.can_export,
         }
+        .sanitized()
     }
 }
 

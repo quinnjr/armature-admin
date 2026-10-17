@@ -9,6 +9,34 @@ Earlier changes are recorded in the workspace [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-17
+
+### Security
+
+- The admin panel can no longer be mounted unauthenticated. The former `require_auth` check accepted any non-empty `Authorization` header (`Authorization: x` granted full CRUD). Every request now goes through a required `AdminAuthenticator` that must verify a real identity and admin rights (`401` / `403` otherwise).
+- CSRF protection on every state-changing route: rendered `POST` forms carry a `_csrf` token (signed double-submit via `armature-security`'s CSRF module, `SameSite=Strict` `__Host-` cookie, bound to the authenticated administrator); requests without a valid token in the form field or `X-CSRF-Token` header get `403`.
+- Mass assignment closed: create/edit keep only `ModelDefinition::editable_fields()`; primary key, readonly (`readonly_fields` and field-level), excluded, sensitive and undeclared keys are dropped. Non-object JSON bodies are rejected with `400` (they used to replace the whole row, PK included); `InMemoryDataSource::update` rejects them too.
+- `sort` and `filter.*` query keys must name declared fields (sortable / `list_filter` respectively) or the list returns `400`; these names were passed straight to the `DataSource` (SQL identifier injection in a SQL-backed source).
+- Sensitive fields (`password*`, `*_hash`, `*token*`, `*secret*`) are never rendered, exported, accepted, searched, filtered or sorted on. Detail pages render only the model's declared fields instead of every column the data source returns.
+- CSV export is off by default, capped at `export_max_rows` (default 10 000, `X-Export-Truncated: true` when cut), always quotes fields and prefixes values starting with `= + - @ TAB CR` with `'` (formula injection).
+- Every admin response carries `Cache-Control: no-store`.
+
+### Added
+
+- `AdminAuthenticator` trait (implemented for `Fn(&HttpRequest) -> Result<AdminPrincipal, AdminAuthError>`), `AdminPrincipal`, `AdminAuthError`.
+- `Admin::authenticator`, `Admin::csrf_secret`, `Admin::csrf_config`, `Admin::enable_export`, `Admin::export_max_rows`; `AdminConfig::export_max_rows`.
+- `ModelDefinition::{editable_fields, visible_fields, is_readonly, is_sortable_field, is_filter_field, sanitized}` and `is_sensitive_field`.
+- `csrf_token` on `DetailView` / `CreateView` / `EditView` with `with_csrf_token`; `render::render_forbidden`.
+- Depends on `armature-security` 0.4 for CSRF tokens.
+
+### Changed
+
+- **Breaking:** `AdminInstance::routes()` returns `Result<Router, AdminError>` and fails without an authenticator or with a missing/short (< 32 bytes) CSRF secret. Migration: `Admin::new().authenticator(Arc::new(my_auth)).csrf_secret(secret)…build().routes()?`.
+- **Breaking:** `AdminConfig::require_auth` and `Admin::require_auth` removed (the authenticator replaces them).
+- **Breaking:** `AdminConfig::enable_export` defaults to `false`. Migration: `.enable_export(true)`.
+- **Breaking:** `DetailView::with_data` takes the `&ModelDefinition` (`with_data(&model, record)`).
+- **Breaking:** create/edit forms render `editable_fields()` only; `form_fields()` no longer includes sensitive fields; models are sanitized on registration (sensitive/excluded names removed from `list_display`, `search_fields`, `list_filter`, `ordering`).
+
 ## [0.5.0] - 2026-09-15
 
 ### Changed
