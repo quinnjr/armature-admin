@@ -12,7 +12,7 @@ keywords = ["admin", "dashboard", "crud", "ui", "generator"]
 categories = ["web-programming", "gui"]
 
 [dependencies]
-armature-core = { version = "0.12" }
+armature-core = { version = "0.13" }
 armature-log = { version = "0.3" }
 armature-proc-macro = { version = "0.6" }
 # CSRF tokens for the admin forms (signed double-submit, bound to the admin).
